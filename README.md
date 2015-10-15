@@ -13,7 +13,7 @@ inputs := 3
 hidden1 := 3
 hidden2 := 3
 outputs := 3
-n := neuro.NewNetwork([]int{inputs, hidden1, hidden2, outputs)
+n := neuro.NewNetwork([]int{inputs, hidden1, hidden2, outputs})
 
 // Teach network
 n.FeedForward([]float64{1.0, 1.0, 0.0})
