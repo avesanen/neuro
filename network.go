@@ -1,114 +1,91 @@
 package neuro
 
 import (
-	"fmt"
 	"math"
 	"math/rand"
 	"time"
 )
 
 type Network struct {
-	Layers                       [][]*Neuron
-	Error                        float64
-	RecentAverageError           float64
-	RecentAverageSmoothingFactor float64
+	Layers       [][]*Neuron
+	Error        float64
+	AverageError float64
 }
 
 func NewNetwork(topology []int) *Network {
 	rand.Seed(time.Now().UnixNano())
-	n := &Network{}
-	for i, v := range topology {
-		var layer []*Neuron
-		for nn := 0; nn < v; nn++ {
-			layer = append(layer, NewNeuron())
+	network := &Network{}
+	for _, numNeurons := range topology {
+		layer := make([]*Neuron, numNeurons)
+		for i := range layer {
+			layer[i] = NewNeuron()
 		}
-
-		if i != len(topology)-1 {
-			bias := NewNeuron()
-			bias.Outputval = 1.0
-			layer = append(layer, bias)
-		}
-
-		n.Layers = append(n.Layers, layer)
+		network.Layers = append(network.Layers, layer)
 	}
 
-	for layerIndex, _ := range n.Layers {
-		if layerIndex == len(n.Layers)-1 {
-			break
-		}
-		for _, from := range n.Layers[layerIndex] {
-			for _, to := range n.Layers[layerIndex+1] {
-				from.Link(to)
+	for i := 0; i < len(network.Layers)-1; i++ {
+		for _, from := range network.Layers[i] {
+			for _, to := range network.Layers[i+1] {
+				from.Connect(to)
 			}
 		}
 	}
-	return n
+	return network
+}
+
+func (n *Network) Train(inputVals, targetVals []float64) {
+	n.FeedForward(inputVals)
+	n.BackPropagation(targetVals)
 }
 
 func (n *Network) FeedForward(inputVals []float64) {
-	if len(inputVals) != len(n.Layers[0])-1 {
-		fmt.Println("ERROR: Network has", len(n.Layers[0])-1, "inputs.")
-		return
+	inputLayer := n.Layers[0]
+	for i, value := range inputVals {
+		inputLayer[i].OutputVal = value
 	}
 
-	for layerIndex, layer := range n.Layers {
-		if layerIndex == 0 {
-			for i, v := range inputVals {
-				layer[i].Outputval = v
-			}
-		} else {
-			for _, neuron := range layer {
-				neuron.FeedForward()
-			}
+	for _, layer := range n.Layers[1:] {
+		for _, neuron := range layer {
+			neuron.FeedForward()
 		}
 	}
 }
 
 func (n *Network) BackPropagation(targetVals []float64) {
-	// Todo: Check for correct amout of targetVals
-	outputlayer := n.Layers[len(n.Layers)-1]
+	outputLayer := n.Layers[len(n.Layers)-1]
 	n.Error = 0.0
 
-	for neuronIndex, neuron := range outputlayer {
-		delta := targetVals[neuronIndex] - neuron.Outputval
+	for i, neuron := range outputLayer {
+		delta := targetVals[i] - neuron.OutputVal
 		n.Error += delta * delta
 	}
 
-	n.Error /= float64(len(outputlayer) - 1)
+	n.Error /= float64(len(outputLayer))
 	n.Error = math.Sqrt(n.Error)
+	n.AverageError = (n.AverageError + n.Error) / 2.0
 
-	n.RecentAverageError = (n.RecentAverageError + n.RecentAverageSmoothingFactor + n.Error)
-	n.RecentAverageError /= n.RecentAverageSmoothingFactor + 1.0
-
-	for neuronIndex, neuron := range outputlayer {
-		if neuronIndex == len(outputlayer) {
-			break
-		}
-		neuron.CalcOutputGradients(targetVals[neuronIndex])
+	for i, neuron := range outputLayer {
+		neuron.CalculateGradients(targetVals[i])
 	}
 
-	for layerIndex := len(n.Layers) - 2; layerIndex > 0; layerIndex-- {
-		for _, neuron := range n.Layers[layerIndex] {
-			neuron.CalcHiddenGradients()
+	for i := len(n.Layers) - 2; i > 0; i-- {
+		for _, neuron := range n.Layers[i] {
+			neuron.CalculateGradients(0)
 		}
 	}
 
-	for layerIndex := len(n.Layers) - 1; layerIndex > 0; layerIndex-- {
-		for neuronIndex, neuron := range n.Layers[layerIndex] {
-			if neuronIndex == len(n.Layers[layerIndex]) {
-				break
-			}
-			//if rand.Intn(10) > 5 {
-			neuron.UpdateInputWeights()
-			//}
+	for _, layer := range n.Layers[1:] {
+		for _, neuron := range layer {
+			neuron.UpdateWeights()
 		}
 	}
 }
 
 func (n *Network) Results() []float64 {
-	var resultVals []float64
-	for _, neuron := range n.Layers[len(n.Layers)-1] {
-		resultVals = append(resultVals, neuron.Outputval)
+	outputLayer := n.Layers[len(n.Layers)-1]
+	results := make([]float64, len(outputLayer))
+	for i, neuron := range outputLayer {
+		results[i] = neuron.OutputVal
 	}
-	return resultVals
+	return results
 }
